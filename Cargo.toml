@@ -1,0 +1,18 @@
+[package]
+name = "lepton"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bytecheck = "0.8.2"
+leb128 = "0.2.5"
+
+# Serialization
+rkyv = "0.8.14"
+thiserror = "2.0.18"
+
+# Tracing (logs)
+tracing = "0.1.44"
+
+# Compression
+zstd = "0.13.3"
