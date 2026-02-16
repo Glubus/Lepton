@@ -16,6 +16,9 @@ pub enum LeptonError {
 
     #[error("Invalid magic bytes")]
     InvalidMagic,
+
+    #[error("Custom error: {0}")]
+    Custom(String),
 }
 
 pub type LeptonResult<T> = Result<T, LeptonError>;

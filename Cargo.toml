@@ -16,3 +16,4 @@ tracing = "0.1.44"
 
 # Compression
 zstd = "0.13.3"
+liblzma = "0.4.4"
