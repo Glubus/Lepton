@@ -1,89 +1,99 @@
-use crate::engine::timing::hit_window::{HitWindow, HitWindows};
+use crate::engine::timing::hit_window::{HitRule, HitWindow, OrderedHitWindows};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OsuJudgement {
-    Max,
+    Marvelous,
+    Perfect,
     Great,
     Good,
-    Ok,
-    Meh,
+    Bad,
     Miss,
 }
 
-pub struct OsuHitWindows {
-    pub max: HitWindow,
-    pub great: HitWindow,
-    pub good: HitWindow,
-    pub ok: HitWindow,
-    pub meh: HitWindow,
-}
+pub type OsuHitWindows = OrderedHitWindows<OsuJudgement, 5>;
 
-impl HitWindows for OsuHitWindows {
-    type Judgement = OsuJudgement;
+const US_PER_MS: f32 = 1000.0;
 
-    fn judge(&self, delta_us: i32) -> Option<Self::Judgement> {
-        if self.max.contains(delta_us) {
-            Some(OsuJudgement::Max)
-        } else if self.great.contains(delta_us) {
-            Some(OsuJudgement::Great)
-        } else if self.good.contains(delta_us) {
-            Some(OsuJudgement::Good)
-        } else if self.ok.contains(delta_us) {
-            Some(OsuJudgement::Ok)
-        } else if self.meh.contains(delta_us) {
-            Some(OsuJudgement::Meh)
-        } else if delta_us >= self.meh.early && delta_us <= self.meh.late {
-            Some(OsuJudgement::Miss)
-        } else if delta_us > self.meh.late {
-            Some(OsuJudgement::Miss)
-        } else {
-            None
-        }
+/// Creates Osu Hit Windows based on the Overall Difficulty (OD).
+pub const fn create_osu_windows(od: f32) -> OsuHitWindows {
+    // Basic scaling for OD (higher OD = stricter windows)
+    let max_us = 16_000;
+    // Convert OD to an integer representation early, effectively OD * 10
+    // e.g. OD 8.5 -> od_x10 = 85
+    let od_x10 = (od * 10.0) as i64;
+    // 3.0 ms per OD point = 3000 us per OD point
+    // Using od_x10: 3000 us * od = 300 us * od_x10
+    let reduction_us = 300 * od_x10;
+
+    let perf_us = 64_000 - reduction_us;
+    let great_us = 97_000 - reduction_us;
+    let good_us = 127_000 - reduction_us;
+    let bad_us = 151_000 - reduction_us;
+
+    OrderedHitWindows {
+        rules: [
+            HitRule {
+                window: HitWindow::symmetric(max_us),
+                judgement: OsuJudgement::Marvelous,
+            },
+            HitRule {
+                window: HitWindow::symmetric(perf_us),
+                judgement: OsuJudgement::Perfect,
+            },
+            HitRule {
+                window: HitWindow::symmetric(great_us),
+                judgement: OsuJudgement::Great,
+            },
+            HitRule {
+                window: HitWindow::symmetric(good_us),
+                judgement: OsuJudgement::Good,
+            },
+            HitRule {
+                window: HitWindow::symmetric(bad_us),
+                judgement: OsuJudgement::Bad,
+            },
+        ],
+        miss_judgement: OsuJudgement::Miss,
+        miss_after: Some(bad_us),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::timing::hit_window::HitWindows;
 
     #[test]
-    fn test_osu_judgement() {
-        let windows = OsuHitWindows {
-            max: HitWindow::symmetric(16_000),   // +/- 16ms
-            great: HitWindow::symmetric(40_000), // +/- 40ms
-            good: HitWindow::symmetric(73_000),  // +/- 73ms
-            ok: HitWindow::symmetric(103_000),   // +/- 103ms
-            meh: HitWindow::symmetric(127_000),  // +/- 127ms
-        };
+    fn test_osu_judgement_base() {
+        let windows = create_osu_windows(0.0);
 
         // Perfect hitting range
-        assert_eq!(windows.judge(0), Some(OsuJudgement::Max));
-        assert_eq!(windows.judge(16_000), Some(OsuJudgement::Max));
-        assert_eq!(windows.judge(-16_000), Some(OsuJudgement::Max));
+        assert_eq!(windows.judge(0), Some(OsuJudgement::Marvelous));
+        assert_eq!(windows.judge(16_000), Some(OsuJudgement::Marvelous));
+        assert_eq!(windows.judge(-16_000), Some(OsuJudgement::Marvelous));
 
         // Great hitting range
-        assert_eq!(windows.judge(16_001), Some(OsuJudgement::Great));
-        assert_eq!(windows.judge(40_000), Some(OsuJudgement::Great));
-        assert_eq!(windows.judge(-40_000), Some(OsuJudgement::Great));
+        assert_eq!(windows.judge(16_001), Some(OsuJudgement::Perfect));
+        assert_eq!(windows.judge(64_000), Some(OsuJudgement::Perfect));
 
         // Good hitting range
-        assert_eq!(windows.judge(40_001), Some(OsuJudgement::Good));
-        assert_eq!(windows.judge(73_000), Some(OsuJudgement::Good));
+        assert_eq!(windows.judge(64_001), Some(OsuJudgement::Great));
+        assert_eq!(windows.judge(97_000), Some(OsuJudgement::Great));
 
         // Ok hitting range
-        assert_eq!(windows.judge(73_001), Some(OsuJudgement::Ok));
-        assert_eq!(windows.judge(-103_000), Some(OsuJudgement::Ok));
+        assert_eq!(windows.judge(97_001), Some(OsuJudgement::Good));
+        assert_eq!(windows.judge(127_000), Some(OsuJudgement::Good));
 
         // Meh hitting range
-        assert_eq!(windows.judge(103_001), Some(OsuJudgement::Meh));
-        assert_eq!(windows.judge(127_000), Some(OsuJudgement::Meh));
+        assert_eq!(windows.judge(127_001), Some(OsuJudgement::Bad));
+        assert_eq!(windows.judge(151_000), Some(OsuJudgement::Bad));
 
         // Miss range (late)
-        assert_eq!(windows.judge(127_001), Some(OsuJudgement::Miss));
+        assert_eq!(windows.judge(151_001), Some(OsuJudgement::Miss));
         assert_eq!(windows.judge(500_000), Some(OsuJudgement::Miss));
 
         // Ignore range (too early)
-        assert_eq!(windows.judge(-127_001), None);
+        assert_eq!(windows.judge(-151_001), None);
         assert_eq!(windows.judge(-500_000), None);
     }
 }

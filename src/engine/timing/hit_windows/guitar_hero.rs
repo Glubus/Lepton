@@ -1,4 +1,4 @@
-use crate::engine::timing::hit_window::{HitWindow, HitWindows};
+use crate::engine::timing::hit_window::{HitRule, HitWindow, OrderedHitWindows};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GhJudgement {
@@ -6,35 +6,25 @@ pub enum GhJudgement {
     Miss,
 }
 
-pub struct GhHitWindows {
-    pub hit: HitWindow,
-}
+pub type GhHitWindows = OrderedHitWindows<GhJudgement, 1>;
 
-impl HitWindows for GhHitWindows {
-    type Judgement = GhJudgement;
-
-    fn judge(&self, delta_us: i32) -> Option<Self::Judgement> {
-        if self.hit.contains(delta_us) {
-            Some(GhJudgement::Hit)
-        } else if delta_us >= self.hit.early && delta_us <= self.hit.late {
-            Some(GhJudgement::Miss)
-        } else if delta_us > self.hit.late {
-            Some(GhJudgement::Miss)
-        } else {
-            None
-        }
-    }
-}
+pub const GH_WINDOWS: GhHitWindows = OrderedHitWindows {
+    rules: [HitRule {
+        window: HitWindow::symmetric(100_000),
+        judgement: GhJudgement::Hit,
+    }],
+    miss_judgement: GhJudgement::Miss,
+    miss_after: Some(100_000),
+};
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::timing::hit_window::HitWindows;
 
     #[test]
     fn test_gh_judgement() {
-        let windows = GhHitWindows {
-            hit: HitWindow::symmetric(100_000),
-        };
+        let windows = GH_WINDOWS;
 
         // Hit
         assert_eq!(windows.judge(0), Some(GhJudgement::Hit));

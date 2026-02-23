@@ -1,4 +1,4 @@
-use crate::engine::timing::hit_window::{HitWindow, HitWindows};
+use crate::engine::timing::hit_window::{HitRule, HitWindow, OrderedHitWindows};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EtternaJudgement {
@@ -11,60 +11,80 @@ pub enum EtternaJudgement {
     Miss,
 }
 
-pub struct EtternaHitWindows {
-    pub marvelous: HitWindow,
-    pub perfect: HitWindow,
-    pub great: HitWindow,
-    pub good: HitWindow,
-    pub bad: HitWindow,
-    pub boo: HitWindow,
-}
+pub type EtternaHitWindows = OrderedHitWindows<EtternaJudgement, 6>;
 
-impl HitWindows for EtternaHitWindows {
-    type Judgement = EtternaJudgement;
+/// Creates a HitWindow based on Etterna Judge Level (J4 = Standard = 4).
+pub const fn create_etterna_windows(judge_level: i64) -> EtternaHitWindows {
+    // Formula mathematically applied:
+    // Scale for J9 = 0.2 (20 / 100)
+    // Scale for others = 1.0 - ((J - 4) / 6.0)
+    // In integer math (scale_x100), J=4 -> 100, J=5 -> 83, etc.
+    // scale_x100 = 100 - (((judge_level - 4) * 100) / 6)
+    let scale_x100 = if judge_level == 9 {
+        20
+    } else {
+        100 - (((judge_level - 4) * 100) / 6)
+    };
 
-    fn judge(&self, delta_us: i64) -> Option<Self::Judgement> {
-        if self.marvelous.contains(delta_us) {
-            Some(EtternaJudgement::Marvelous)
-        } else if self.perfect.contains(delta_us) {
-            Some(EtternaJudgement::Perfect)
-        } else if self.great.contains(delta_us) {
-            Some(EtternaJudgement::Great)
-        } else if self.good.contains(delta_us) {
-            Some(EtternaJudgement::Good)
-        } else if self.bad.contains(delta_us) {
-            Some(EtternaJudgement::Bad)
-        } else if self.boo.contains(delta_us) {
-            Some(EtternaJudgement::Boo)
-        } else if delta_us >= self.boo.early && delta_us <= self.boo.late {
-            Some(EtternaJudgement::Miss)
-        } else if delta_us > self.boo.late {
-            Some(EtternaJudgement::Miss)
-        } else {
-            None
-        }
+    // Base ms * 1000 = microseconds
+    let base_marv_us = 22_500;
+    let base_perf_us = 45_000;
+    let base_great_us = 90_000;
+    let base_good_us = 135_000;
+    let base_bad_us = 180_000;
+
+    // Etterna special rule: Bad never goes below 180ms
+    let mut bad_calculated = (base_bad_us * scale_x100) / 100;
+    if bad_calculated < 180_000 {
+        bad_calculated = 180_000;
+    }
+
+    OrderedHitWindows {
+        rules: [
+            HitRule {
+                window: HitWindow::symmetric((base_marv_us * scale_x100) / 100),
+                judgement: EtternaJudgement::Marvelous,
+            },
+            HitRule {
+                window: HitWindow::symmetric((base_perf_us * scale_x100) / 100),
+                judgement: EtternaJudgement::Perfect,
+            },
+            HitRule {
+                window: HitWindow::symmetric((base_great_us * scale_x100) / 100),
+                judgement: EtternaJudgement::Great,
+            },
+            HitRule {
+                window: HitWindow::symmetric((base_good_us * scale_x100) / 100),
+                judgement: EtternaJudgement::Good,
+            },
+            HitRule {
+                window: HitWindow::symmetric(bad_calculated),
+                judgement: EtternaJudgement::Bad,
+            },
+            HitRule {
+                window: HitWindow::new(-180_000, 225_000),
+                judgement: EtternaJudgement::Boo,
+            },
+        ],
+        miss_judgement: EtternaJudgement::Miss,
+        miss_after: Some(225_000), // Etterna miss is beyond boo
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::timing::hit_window::HitWindows;
 
     #[test]
-    fn test_etterna_judgement() {
-        let windows = EtternaHitWindows {
-            marvelous: HitWindow::symmetric(22_500), // +/- 22.5ms
-            perfect: HitWindow::symmetric(45_000),   // +/- 45ms
-            great: HitWindow::symmetric(90_000),     // +/- 90ms
-            good: HitWindow::symmetric(135_000),     // +/- 135ms
-            bad: HitWindow::symmetric(180_000),      // +/- 180ms
-            boo: HitWindow::new(-180_000, 225_000),  // Doesn't trigger early, only late is wider
-        };
+    fn test_etterna_judgement_j4() {
+        // J4 has scale=1.0 so standard values apply
+        let windows = create_etterna_windows(4);
 
         // Marvelous
         assert_eq!(windows.judge(22_500), Some(EtternaJudgement::Marvelous));
         assert_eq!(windows.judge(-22_500), Some(EtternaJudgement::Marvelous));
-
+        
         // Perfect
         assert_eq!(windows.judge(22_501), Some(EtternaJudgement::Perfect));
         assert_eq!(windows.judge(-45_000), Some(EtternaJudgement::Perfect));
