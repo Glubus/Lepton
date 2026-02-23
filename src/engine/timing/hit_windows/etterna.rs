@@ -71,6 +71,12 @@ pub const fn create_etterna_windows(judge_level: i64) -> EtternaHitWindows {
     }
 }
 
+impl Default for EtternaHitWindows {
+    fn default() -> Self {
+        create_etterna_windows(4) // J4 is standard
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

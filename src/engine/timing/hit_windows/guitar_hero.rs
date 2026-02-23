@@ -8,14 +8,25 @@ pub enum GhJudgement {
 
 pub type GhHitWindows = OrderedHitWindows<GhJudgement, 1>;
 
-pub const GH_WINDOWS: GhHitWindows = OrderedHitWindows {
-    rules: [HitRule {
-        window: HitWindow::symmetric(100_000),
-        judgement: GhJudgement::Hit,
-    }],
-    miss_judgement: GhJudgement::Miss,
-    miss_after: Some(100_000),
-};
+/// Creates a HitWindow for Guitar Hero based on the window in milliseconds.
+/// standard is usually around 140ms total (+/- 70ms).
+pub const fn create_gh_windows(window_ms: i64) -> GhHitWindows {
+    let window_us = window_ms * 1000;
+    OrderedHitWindows {
+        rules: [HitRule {
+            window: HitWindow::symmetric(window_us),
+            judgement: GhJudgement::Hit,
+        }],
+        miss_judgement: GhJudgement::Miss,
+        miss_after: Some(window_us),
+    }
+}
+
+impl Default for GhHitWindows {
+    fn default() -> Self {
+        create_gh_windows(100) // Default GH window is typically around 100ms
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -24,7 +35,7 @@ mod tests {
 
     #[test]
     fn test_gh_judgement() {
-        let windows = GH_WINDOWS;
+        let windows = create_gh_windows(100);
 
         // Hit
         assert_eq!(windows.judge(0), Some(GhJudgement::Hit));

@@ -18,11 +18,9 @@ const US_PER_MS: f32 = 1000.0;
 pub const fn create_osu_windows(od: f32) -> OsuHitWindows {
     // Basic scaling for OD (higher OD = stricter windows)
     let max_us = 16_000;
-    // Convert OD to an integer representation early, effectively OD * 10
-    // e.g. OD 8.5 -> od_x10 = 85
+
     let od_x10 = (od * 10.0) as i64;
-    // 3.0 ms per OD point = 3000 us per OD point
-    // Using od_x10: 3000 us * od = 300 us * od_x10
+
     let reduction_us = 300 * od_x10;
 
     let perf_us = 64_000 - reduction_us;
@@ -55,6 +53,12 @@ pub const fn create_osu_windows(od: f32) -> OsuHitWindows {
         ],
         miss_judgement: OsuJudgement::Miss,
         miss_after: Some(bad_us),
+    }
+}
+
+impl Default for OsuHitWindows {
+    fn default() -> Self {
+        create_osu_windows(8.0)
     }
 }
 
