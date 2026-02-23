@@ -24,9 +24,40 @@ impl HitWindow {
     }
 }
 
+pub struct HitRule<J> {
+    pub window: HitWindow,
+    pub judgement: J,
+}
+
+pub struct OrderedHitWindows<J, const N: usize> {
+    pub rules: [HitRule<J>; N],
+    pub miss_judgement: J,
+    pub miss_after: Option<i64>,
+}
+
 pub trait HitWindows {
     type Judgement;
     fn judge(&self, delta_us: i64) -> Option<Self::Judgement>;
+}
+
+impl<J: Copy, const N: usize> HitWindows for OrderedHitWindows<J, N> {
+    type Judgement = J;
+
+    fn judge(&self, delta_us: i64) -> Option<Self::Judgement> {
+        for rule in &self.rules {
+            if rule.window.contains(delta_us) {
+                return Some(rule.judgement);
+            }
+        }
+
+        if let Some(limit) = self.miss_after {
+            if delta_us > limit {
+                return Some(self.miss_judgement);
+            }
+        }
+
+        None
+    }
 }
 
 #[cfg(test)]
